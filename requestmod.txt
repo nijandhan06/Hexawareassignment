@@ -1,0 +1,194 @@
+import requests
+from datetime import datetime, date
+import json
+from enum import Enum
+
+# Base URL of your FastAPI application
+BASE_URL = "http://127.0.0.1:8029"
+
+class Endpoint(Enum):
+    CREATE = 1
+    GET_ALL = 2
+    GET_BY_ID = 3
+    GET_BY_CITY = 4
+    GET_BY_DATE = 5
+    UPDATE = 6
+    GET_AVG_TEMP = 7
+    GET_AVG_HUMIDITY = 8
+    DELETE = 9
+
+def print_response(response):
+    """Helper function to print response details"""
+    print(f"Status Code: {response.status_code}")
+    try:
+        print("Response JSON:", json.dumps(response.json(), indent=2))
+    except ValueError:
+        print("Response Text:", response.text)
+    print("-" * 50)
+
+def get_weather_data_from_user():
+    """Get weather record details from user input"""
+    print("\nEnter weather record details:")
+    
+    city = input("City (required): ").strip()
+    while not city:
+        print("City cannot be empty!")
+        city = input("City (required): ").strip()
+    
+    temperature = None
+    while temperature is None:
+        try:
+            temperature = float(input("Temperature (required): ").strip())
+        except ValueError:
+            print("Temperature must be a number!")
+    
+    humidity = None
+    while humidity is None:
+        try:
+            humidity = float(input("Humidity (required, 0-100): ").strip())
+            if not 0 <= humidity <= 100:
+                print("Humidity must be between 0 and 100!")
+                humidity = None
+        except ValueError:
+            print("Humidity must be a number!")
+    
+    wind_speed = None
+    while wind_speed is None:
+        try:
+            wind_speed = float(input("Wind speed (required): ").strip())
+        except ValueError:
+            print("Wind speed must be a number!")
+    
+    description = input("Description (optional): ").strip() or None
+    
+    return {
+        "city": city,
+        "temperature": temperature,
+        "humidity": humidity,
+        "wind_speed": wind_speed,
+        "description": description
+    }
+
+def call_endpoint(endpoint: Endpoint, **kwargs):
+    """Switch case implementation for calling different endpoints"""
+    record_id = kwargs.get('record_id')
+    weather_data = kwargs.get('weather_data')
+    city = kwargs.get('city')
+    date_str = kwargs.get('date_str')
+
+    response = None
+    
+    match endpoint:
+        case Endpoint.CREATE:
+            response = requests.post(f"{BASE_URL}/records/", json=weather_data)
+        case Endpoint.GET_ALL:
+            response = requests.get(f"{BASE_URL}/records/")
+        case Endpoint.GET_BY_ID:
+            response = requests.get(f"{BASE_URL}/records/{record_id}")
+        case Endpoint.GET_BY_CITY:
+            response = requests.get(f"{BASE_URL}/records/city/{city}")
+        case Endpoint.GET_BY_DATE:
+            response = requests.get(f"{BASE_URL}/records/date/{date_str}")
+        case Endpoint.UPDATE:
+            response = requests.put(f"{BASE_URL}/records/{record_id}", json=weather_data)
+        case Endpoint.GET_AVG_TEMP:
+            response = requests.get(f"{BASE_URL}/records/city/{city}/average/temperature")
+        case Endpoint.GET_AVG_HUMIDITY:
+            response = requests.get(f"{BASE_URL}/records/city/{city}/average/humidity")
+        case Endpoint.DELETE:
+            response = requests.delete(f"{BASE_URL}/records/{record_id}")
+        case _:
+            print("Invalid endpoint")
+    
+    if response is not None:
+        print_response(response)
+        return response
+    return None
+
+def show_menu():
+    """Display menu and handle user choices"""
+    current_record_id = None
+    
+    while True:
+        print("\nWeather Data Management System")
+        print("1. Create a new weather record")
+        print("2. View all weather records")
+        print("3. View a specific weather record")
+        print("4. View records by city")
+        print("5. View records by date")
+        print("6. Update a weather record")
+        print("7. Get average temperature for a city")
+        print("8. Get average humidity for a city")
+        print("9. Delete a weather record")
+        print("0. Exit")
+        
+        choice = input("Enter your choice (0-9): ").strip()
+        
+        try:
+            choice = int(choice)
+            if choice == 0:
+                print("Exiting...")
+                break
+            elif choice == 1:
+                weather_data = get_weather_data_from_user()
+                response = call_endpoint(Endpoint.CREATE, weather_data=weather_data)
+                if response and response.status_code == 201:
+                    current_record_id = response.json().get("id")
+            elif choice == 2:
+                call_endpoint(Endpoint.GET_ALL)
+            elif choice == 3:
+                if current_record_id:
+                    use_current = input(f"Use current record ID {current_record_id}? (y/n): ").strip().lower()
+                    if use_current == 'y':
+                        record_id = current_record_id
+                    else:
+                        record_id = input("Enter record ID: ").strip()
+                else:
+                    record_id = input("Enter record ID: ").strip()
+                call_endpoint(Endpoint.GET_BY_ID, record_id=record_id)
+            elif choice == 4:
+                city = input("Enter city name: ").strip()
+                call_endpoint(Endpoint.GET_BY_CITY, city=city)
+            elif choice == 5:
+                date_str = input("Enter date (YYYY-MM-DD): ").strip()
+                try:
+                    datetime.strptime(date_str, "%Y-%m-%d")  # Validate date format
+                    call_endpoint(Endpoint.GET_BY_DATE, date_str=date_str)
+                except ValueError:
+                    print("Invalid date format. Please use YYYY-MM-DD")
+            elif choice == 6:
+                if current_record_id:
+                    use_current = input(f"Use current record ID {current_record_id}? (y/n): ").strip().lower()
+                    if use_current == 'y':
+                        record_id = current_record_id
+                    else:
+                        record_id = input("Enter record ID to update: ").strip()
+                else:
+                    record_id = input("Enter record ID to update: ").strip()
+                weather_data = get_weather_data_from_user()
+                call_endpoint(Endpoint.UPDATE, record_id=record_id, weather_data=weather_data)
+            elif choice == 7:
+                city = input("Enter city name: ").strip()
+                call_endpoint(Endpoint.GET_AVG_TEMP, city=city)
+            elif choice == 8:
+                city = input("Enter city name: ").strip()
+                call_endpoint(Endpoint.GET_AVG_HUMIDITY, city=city)
+            elif choice == 9:
+                if current_record_id:
+                    use_current = input(f"Delete current record ID {current_record_id}? (y/n): ").strip().lower()
+                    if use_current == 'y':
+                        record_id = current_record_id
+                    else:
+                        record_id = input("Enter record ID to delete: ").strip()
+                else:
+                    record_id = input("Enter record ID to delete: ").strip()
+                call_endpoint(Endpoint.DELETE, record_id=record_id)
+                if record_id == current_record_id:
+                    current_record_id = None
+            else:
+                print("Invalid choice. Please enter a number between 0 and 9.")
+        except ValueError:
+            print("Invalid input. Please enter a number.")
+
+if __name__ == "__main__":
+    show_menu()
